@@ -1,0 +1,115 @@
+<!DOCTYPE html><html lang="en"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description" content=""><title>【Nori】Ray Tracing Acceleration Data Structures | Computer Graphics is Awesome</title><link rel="stylesheet" type="text/css" href="/css/style.css?v=1.0.0"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/normalize/latest/normalize.min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/latest/pure-min.min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/latest/grids-responsive-min.min.css"><link rel="stylesheet" href="//lib.baomitu.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//lib.baomitu.com/jquery/latest/jquery.min.js"></script><link rel="icon" mask="" sizes="any" href="/favicon.ico"><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"><script type="text/javascript" src="//lib.baomitu.com/clipboard.js/latest/clipboard.min.js"></script><script type="text/javascript" src="//lib.baomitu.com/toastr.js/latest/toastr.min.js"></script><link rel="stylesheet" href="//lib.baomitu.com/toastr.js/latest/toastr.min.css"><!-- hexo injector head_end start -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hexo-math@4.0.0/dist/style.css">
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 6.3.0"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">【Nori】Ray Tracing Acceleration Data Structures</h1><a id="logo" href="/.">Computer Graphics is Awesome</a><p class="description"></p></div><div id="nav-menu"><a class="current" href="/."><i class="fa fa-home"> Home</i></a><a href="/archives/"><i class="fa fa-archive"> Archive</i></a><a href="/about/"><i class="fa fa-user"> About</i></a><a href="/atom.xml"><i class="fa fa-rss"> RSS</i></a></div></div><div class="pure-g" id="layout"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">【Nori】Ray Tracing Acceleration Data Structures</h1><div class="post-meta">2023-09-03<span> | </span><span class="category"><a href="/categories/Computer-Graphics/">Computer Graphics</a></span></div><div class="post-content"><h1 id="任务">任务</h1>
+<p>这个lab的任务是实现一个octree来加速</p>
+<h1 id="part-1-octree-construction">Part 1: Octree construction</h1>
+<h2 id="what-is-a-reasonable-max-depth-of-the-tree-2-pts">What is a
+reasonable max depth of the tree? (2 pts)</h2>
+<p>我们需要限制树的深度是因为如果mesh有一部分三角形密度过高，很可能导致一直无法让bounding
+box里三角形的数量小于10， 导致递归的堆栈溢出。 对比了在不同深度中， leaf
+node的平均三角形数量。 发现在depth = 8的时候，平均三角形的数量为7，
+最接近我们希望的10，所以8应该为最好的最大深度。</p>
+<h2 id="what-information-do-you-store-per-octree-node-2-pts">What
+information do you store per octree node? (2 pts)</h2>
+<p>我们对node的定义如下：</p>
+<pre><code><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> <span class="title class_">Node</span> &#123;</span><br><span class="line">    BoundingBox3f box;</span><br><span class="line">    std::vector&lt;NodePtr&gt; children;</span><br><span class="line">    std::vector&lt;<span class="type">uint32_t</span>&gt; ids;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></code></pre>
+<ol type="1">
+<li>children为子节点的数组，每一个元素为指向子节点的unique ptr。</li>
+<li>box 为包住当前节点的bounding box</li>
+<li>ids 为被当前节点包住的所有三角形的id</li>
+</ol>
+<h2
+id="how-many-bytes-of-memory-does-one-of-your-octree-nodes-occupy-3-pts">How
+many bytes of memory does one of your octree nodes occupy? (3 pts)</h2>
+<ol type="1">
+<li>box 里存了min和max两个点，每一个点里有3个float。 所以size
+3<em>4</em>2 = 24</li>
+<li>vector里存了3个元素： begin(), end(), capacity的指针， 所以size 为
+3*8 = 24。</li>
+</ol>
+<p>所以最终的size为 24 + 24*2 = 72</p>
+<h2
+id="compute-statistics-during-the-tree-construction.-for-the-ajax-scene-report">Compute
+statistics during the tree construction. For the Ajax scene,
+report:</h2>
+<ul>
+<li>Construction time with your local machine (not graded) 949ms</li>
+<li>Number of interior nodes (2 pts) 27542</li>
+<li>Number of leaf nodes (2 pts) 192795</li>
+<li>Average number of triangles per leaf node (a triangle can exist in
+multiple nodes) (2 pts) 7</li>
+</ul>
+<h1 id="part-2-ray-traversal">Part 2: Ray traversal</h1>
+<h2
+id="explain-the-logic-of-your-traversal-function-and-justify-its-correctness.-4-pts">Explain
+the logic of your traversal function and justify its correctness. (4
+pts)</h2>
+<p>从根节点开始搜索，如果ray跟子节点的box相交，那么就递归搜索子节点。如果到了叶节点，那么就用brute
+force方法遍历每一个叶节点中的三角形。这么做能保证遍历了每一个与ray相交的三角形。</p>
+<h2
+id="measure-the-render-time-of-the-ajax-scene-on-your-machine.-how-much-of-a-speed-up-did-you-achieve-over-what-was-there-before-5pts">Measure
+the render time of the Ajax scene on your machine. How much of a
+speed-up did you achieve over what was there before? (5pts)</h2>
+<p>比较bunny 的结果： 553ms vs 23ms</p>
+<table>
+<thead>
+<tr class="header">
+<th>brute force</th>
+<th>octree</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><img src="bunny_brute.png" /></td>
+<td><img src="bunny_oct.png" /></td>
+</tr>
+</tbody>
+</table>
+<h1 id="part-3-improved-ray-traversal">Part 3: Improved ray
+traversal</h1>
+<h2
+id="include-the-surface-normal-visualization-of-the-ajax-bust-rendered-by-both-your-basic-and-improved-implementations.-they-should-match-perfectly.">Include
+the surface normal visualization of the Ajax bust rendered by both your
+basic and improved implementations. They should match perfectly.</h2>
+<table>
+<thead>
+<tr class="header">
+<th>without sort</th>
+<th>with sort</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><img src="ajax.png" /></td>
+<td><img src="ajax_sort.png" /></td>
+</tr>
+</tbody>
+</table>
+<h2
+id="how-dit-you-implement-the-sorting-explain-your-design-choices.-2-pts">How
+dit you implement the sorting? Explain your design choices. (2 pts)</h2>
+<p>建立一个数组存放到ray原点的距离和在children数组中的下标，根据距离排序：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">std::pair&lt;<span class="type">float</span>, <span class="type">size_t</span>&gt; distances[<span class="number">8</span>] = &#123;&#125;;</span><br><span class="line"><span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">0</span>; i &lt; <span class="number">8</span>; i++) &#123;</span><br><span class="line">    <span class="type">float</span> distance = children[i]-&gt;box.<span class="built_in">distanceTo</span>(ray.o);</span><br><span class="line">    distances[i] = std::<span class="built_in">make_pair</span>(distance, i);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">std::<span class="built_in">sort</span>(distances, distances + <span class="number">8</span>, [](<span class="type">const</span> <span class="keyword">auto</span>&amp; l, <span class="type">const</span> <span class="keyword">auto</span>&amp; r) &#123; <span class="keyword">return</span> l.first &lt; r.first; &#125;);</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (<span class="keyword">auto</span> pair : distances) &#123;</span><br><span class="line">    <span class="type">float</span> distance = pair.first;</span><br><span class="line">    Node* child = children[pair.second].<span class="built_in">get</span>();</span><br><span class="line">    <span class="keyword">if</span> (distance &gt; ray.maxt) <span class="keyword">break</span>;</span><br><span class="line">    isHit |= child-&gt;<span class="built_in">traverse</span>(ray, it, idx, shadowRay, mesh, shouldSort);</span><br><span class="line">    <span class="keyword">if</span> (shadowRay &amp;&amp; isHit) <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2
+id="measure-the-render-time-with-this-improved-version.-how-much-of-a-speedup-is-this-relative-to-part-2-elaborate-the-configuration-details-you-use-for-comparison.">Measure
+the render time with this improved version. How much of a speedup is
+this relative to Part 2? Elaborate the configuration details you use for
+comparison.</h2>
+<p>1.2s vs 949ms</p>
+<table>
+<thead>
+<tr class="header">
+<th>without sort</th>
+<th>with sort</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><img src="ajax_perf.png" /></td>
+<td><img src="ajax_sort_perf.png" /></td>
+</tr>
+</tbody>
+</table>
+</div><div class="tags"><ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Data-Sturcture/" rel="tag">Data Sturcture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Nori/" rel="tag">Nori</a></li></ul></div><div class="post-nav"><a class="pre" href="/2023/09/04/Nori3/">【Nori】Monte Carlo Sampling and Ambient Occlusion</a></div></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form class="search-form" action="//www.google.com/search" method="get" accept-charset="utf-8" target="_blank"><input type="text" name="q" maxlength="20" placeholder="Search"/><input type="hidden" name="sitesearch" value="https://henrai.github.io"/></form></div><div class="widget"><div class="author-info"><a class="info-avatar" href="/about/" title="About"><img class="nofancybox" src="/img/avatar.png"/></a><p>To be a better man.</p><a class="info-icon" href="https://twitter.com/username" title="Twitter" target="_blank" style="margin-inline:5px"> <i class="fa fa-twitter-square" style="margin-inline:5px"></i></a><a class="info-icon" href="mailto:admin@domain.com" title="Email" target="_blank" style="margin-inline:5px"> <i class="fa fa-envelope-square" style="margin-inline:5px"></i></a><a class="info-icon" href="https://github.com/username" title="Github" target="_blank" style="margin-inline:5px"> <i class="fa fa-github-square" style="margin-inline:5px"></i></a><a class="info-icon" href="/atom.xml" title="RSS" target="_blank" style="margin-inline:5px"> <i class="fa fa-rss-square" style="margin-inline:5px"></i></a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> Categories</i></div><ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Computer-Graphics/">Computer Graphics</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> Tags</i></div><div class="tagcloud"><a href="/tags/Data-Sturcture/" style="font-size: 15px;">Data Sturcture</a> <a href="/tags/Nori/" style="font-size: 15px;">Nori</a> <a href="/tags/Sampling/" style="font-size: 15px;">Sampling</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> Recent</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2023/09/04/Nori3/">【Nori】Monte Carlo Sampling and Ambient Occlusion</a></li><li class="post-list-item"><a class="post-list-link" href="/2023/09/03/Nori2/">【Nori】Ray Tracing Acceleration Data Structures</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> Links</i></div><ul></ul><a href="http://www.example1.com/" title="site-name1" target="_blank">site-name1</a><ul></ul><a href="http://www.example2.com/" title="site-name2" target="_blank">site-name2</a><ul></ul><a href="http://www.example3.com/" title="site-name3" target="_blank">site-name3</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">Copyright © 2023 <a href="/." rel="nofollow">Computer Graphics is Awesome.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a class="show" id="rocket" href="#top"></a><script type="text/javascript" src="/js/totop.js?v=1.0.0" async></script><script type="text/javascript" src="//lib.baomitu.com/fancybox/latest/jquery.fancybox.min.js"></script><script type="text/javascript" src="/js/fancybox.js?v=1.0.0"></script><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/fancybox/latest/jquery.fancybox.min.css"><script type="text/javascript" src="/js/copycode.js?v=1.0.0" successtext="Copy Successed!"></script><link rel="stylesheet" type="text/css" href="/css/copycode.css?v=1.0.0"><script type="text/javascript" src="/js/codeblock-resizer.js?v=1.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=1.0.0"></script></div></body></html>
